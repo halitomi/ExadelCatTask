@@ -28,7 +28,10 @@ def generate_fragments(image, bounding_box, n, size, inside, output_folder):
     y_min = min(by1, by2)
     y_max = max(by1, by2)
 
-
+    if inside:
+        if x_max - x_min < size or y_max - y_min < size:
+            raise ValueError("Bounding box is smaller than fragment size.")
+        
     fragments = set()  # store (x, y) positions without duplicates
 
     max_attempts = n * 20 
@@ -37,32 +40,50 @@ def generate_fragments(image, bounding_box, n, size, inside, output_folder):
     while len(fragments) < n and attempts < max_attempts:
         attempts += 1
 
-        # random top-left coordinate for the square
-        x = random.randint(0, width - size)
-        y = random.randint(0, height - size)
+        if inside:
+            # sample directly inside the bounding box
+            x = random.randint(x_min, x_max - size)
+            y = random.randint(y_min, y_max - size)
+        else:
+            # sample anywhere in the image
+            x = random.randint(0, width - size)
+            y = random.randint(0, height - size)
+
 
         # check if the square is inside bounding box
-        inside_bb = (x >= x_min and x + size <= x_max and
-                     y >= y_min and y + size <= y_max)
+        inside_bb = (
+            x >= x_min and x + size <= x_max and
+            y >= y_min and y + size <= y_max
+        )
 
-
+        #outside of bounding box
+        outside_bb = (
+            x + size <= x_min or
+            x >= x_max or
+            y + size <= y_min or
+            y >= y_max
+        )
 
         # Keep based on inside/outside requirement
-        if inside:
-            if not inside_bb:
-                continue
-        if not inside and inside_bb:
+        if inside and not inside_bb:
+            continue
+        if not inside and not outside_bb:
             continue
 
+        
+    
         fragments.add((x, y))
 
     if len(fragments) < n:
-        print(f"Generated {len(fragments)} fragments out of {n}")
+        raise ValueError(
+            f"Could not generate {n} fragments with given constraints."
+        )
 
 
     # Fragment saving
     for idx, (x, y) in enumerate(fragments):
         crop = image.crop((x, y, x + size, y + size))
+        crop = crop.convert("RGB")
         crop.save(os.path.join(output_folder, f"fragment_{idx}.jpg"), "JPEG")
 
     print(f"Generated {len(fragments)} fragments in the '{output_folder}'")
